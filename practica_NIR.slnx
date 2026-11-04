@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="practica_NIR/practica_NIR.vcxproj" Id="33d82d13-cbf2-4757-aaf9-af10f8e6dd41" />
+</Solution>
