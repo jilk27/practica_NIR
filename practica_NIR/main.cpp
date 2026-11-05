@@ -7,6 +7,8 @@
 #include <vector>
 #include <cmath>
 #include "SINS.h"
+#include "Simulator.h"
+#include "VecMath.h"
 
 int main() {
     // --- инициализация GLFW + OpenGL ---
@@ -24,13 +26,15 @@ int main() {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
 
+    Simulator sim;
+    SINS sins;
+
     float amplitude = 2.0f;
     float frequency = 0.2f;
-    float pitch_deg = 0.0f;
 
-    std::vector<double> times, acc_z, signal_clean;
+    std::vector<double> times, acc_z_raw, acc_z_ideal;
     double t = 0.0;
-    const double dt = 0.001;
+    const double dt = 0.01;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -40,33 +44,51 @@ int main() {
         ImGui::NewFrame();
 
         ImGui::Begin("Управление");
-        ImGui::SliderFloat("Амплитуда", &amplitude, 0.0f, 10.0f);
-        ImGui::SliderFloat("Частота", &frequency, 0.0f, 5.0f);
-        ImGui::SliderFloat("Тангаж", &pitch_deg, -90.0f, 90.0f);
+        ImGui::SliderFloat("Амплитуда", &sim.signal_amplitude, 0.0f, 10.0f);
+        ImGui::SliderFloat("Частота", &sim.frequency, 0.0f, 5.0f);
+        ImGui::SliderFloat("Крен", &sim.roll_deg, -90.0f, 90.0f);
+        ImGui::SliderFloat("Тангаж", &sim.pitch_deg, -90.0f, 90.0f);
+        ImGui::SliderFloat("Рысканье", &sim.yaw_deg, -90.0f, 90.0f);
         ImGui::End();
 
         // --- генерация новых данных ---
         t += dt;
-        double a_signal = amplitude * std::sin(2.0 * M_PI * frequency * t);
-        double g_b_z = SINS::G_ACCEL * std::cos(pitch_deg * SINS::DEG2RAD);
+        // 1. Симулятор выдает сырые данные (acc = a + g)
+        Vec acc_b = sim.getAccel(dt);
+
+        // 2. Симулятор выдает данные гироскопа (gyro = U)
+        // (Передаем текущую матрицу из SINS, чтобы симулятор знал ориентацию)
+        Vec gyro_b = sim.getGyro(sins.C_b_n);
+
+        // 3. АЛГОРИТМ SINS ОБРАБАТЫВАЕТ ЭТИ ДАННЫЕ
+        // Он вычтет g и U, проинтегрирует и обновит свои координаты
+        sins.update(acc_b, gyro_b, dt);
+
+        // --- ДАННЫЕ ДЛЯ ГРАФИКА ---
+        // Идеальный сигнал (то, что физически задал пользователь, без гравитации)
+        double a_ideal = sim.signal_amplitude * std::sin(2.0 * M_PI * sim.frequency * sim.t);
 
         times.push_back(t);
-        acc_z.push_back(a_signal + g_b_z);      // с гравитацией
-        signal_clean.push_back(a_signal + g_b_z); // идеальный сигнал
+        acc_z_raw.push_back(acc_b[2]);      // Сырые данные по оси Z (с гравитацией)
+        acc_z_ideal.push_back(a_ideal);     // Идеальный полезный сигнал
 
-        if (times.size() > 2000) {
+        if (times.size() > 1000) {
             times.erase(times.begin());
-            acc_z.erase(acc_z.begin());
-            signal_clean.erase(signal_clean.begin());
+            acc_z_raw.erase(acc_z_raw.begin());
+            acc_z_ideal.erase(acc_z_ideal.begin());
         }
 
-        // --- окно с графиком ---
-        ImGui::Begin("График показаний акселерометра");
+        // --- ГРАФИК ---
+        ImGui::Begin("График показаний акселерометра (Ось Z)");
         if (ImPlot::BeginPlot("##acc", ImVec2(-1, -1))) {
             ImPlot::SetupAxes("t (с)", "Ускорение (м/с²)");
             ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
-            ImPlot::PlotLine("Сырые данные (с g)", times.data(), acc_z.data(), times.size());
-            ImPlot::PlotLine("Идеальный сигнал", times.data(), signal_clean.data(), times.size());
+
+            // Рисуем сырые данные, которые выдал Симулятор
+            ImPlot::PlotLine("Сырые данные (с g)", times.data(), acc_z_raw.data(), times.size());
+            // Рисуем идеальный сигнал для сравнения
+            ImPlot::PlotLine("Идеальный сигнал", times.data(), acc_z_ideal.data(), times.size());
+
             ImPlot::EndPlot();
         }
         ImGui::End();
