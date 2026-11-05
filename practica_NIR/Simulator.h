@@ -5,9 +5,12 @@
 
 class Simulator {
 public:
-    double signal_amplitude = 2.0;   // амплитуда ускорения, м/с^2
-    double frequency = 0.2;   // частота сигнала, Гц
-    double pitch_deg = 0.0;   // тангаж, градусы
+    float signal_amplitude = 2.0f;   // амплитуда ускорения, м/с^2
+    float frequency = 0.2f;   // частота сигнала, Гц
+
+    float roll_deg = 0.0f;
+    float pitch_deg = 0.0f;   // тангаж, градусы
+    float yaw_deg = 0.0f;
 
     double t = 0.0;   
 
@@ -17,11 +20,13 @@ public:
         Vec g_n(0.0, 0.0, SINS::G_ACCEL);
 
         //матрица перехода NED -> Body
-        double theta = pitch_deg * SINS::DEG2RAD;
-        Mat C_n_b;
-        C_n_b[0][0] = std::cos(theta);  C_n_b[0][1] = 0; C_n_b[0][2] = -std::sin(theta);
-        C_n_b[1][0] = 0;                C_n_b[1][1] = 1; C_n_b[1][2] = 0;
-        C_n_b[2][0] = std::sin(theta);  C_n_b[2][1] = 0; C_n_b[2][2] = std::cos(theta);
+        double r = roll_deg * SINS::DEG2RAD;
+        double p = pitch_deg * SINS::DEG2RAD;
+        double y = yaw_deg * SINS::DEG2RAD;
+
+        Mat C_b_n = Mat::fromEuler(r, p, y);
+        
+        Mat C_n_b = T(C_b_n);
 
         Vec g_b = C_n_b * g_n;
 
@@ -44,6 +49,7 @@ public:
             -SINS::OMEGA_EARTH * std::sin(L)
         );
         Mat C_n_b = T(C_b_n);
-        return C_n_b * omega_ie_n;
+        Vec w_body(1.0, 0.0, 0.0);
+        return w_body + C_n_b * omega_ie_n;
     }
 };
