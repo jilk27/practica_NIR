@@ -53,24 +53,21 @@ int main() {
 
         // --- генерация новых данных ---
         t += dt;
-        // 1. Симулятор выдает сырые данные (acc = a + g)
-        Vec acc_b = sim.getAccel(dt);
+        // 1. Симулятор выдает СТРУКТУРУ с сырыми данными
+        ImuMeasurement imu = sim.getMeasurement(dt, sins.C_b_n);
 
-        // 2. Симулятор выдает данные гироскопа (gyro = U)
-        // (Передаем текущую матрицу из SINS, чтобы симулятор знал ориентацию)
-        Vec gyro_b = sim.getGyro(sins.C_b_n);
-
-        // 3. АЛГОРИТМ SINS ОБРАБАТЫВАЕТ ЭТИ ДАННЫЕ
-        // Он вычтет g и U, проинтегрирует и обновит свои координаты
-        sins.update(acc_b, gyro_b, dt);
+        // 2. АЛГОРИТМ SINS ОБРАБАТЫВАЕТ ЭТИ ДАННЫЕ
+        // Достаем векторы из структуры
+        sins.update(imu.accelerometer, imu.gyroscope, dt);
 
         // --- ДАННЫЕ ДЛЯ ГРАФИКА ---
-        // Идеальный сигнал (то, что физически задал пользователь, без гравитации)
         double a_ideal = sim.signal_amplitude * std::sin(2.0 * M_PI * sim.frequency * sim.t);
 
         times.push_back(t);
-        acc_z_raw.push_back(acc_b[2]);      // Сырые данные по оси Z (с гравитацией)
-        acc_z_ideal.push_back(a_ideal);     // Идеальный полезный сигнал
+
+        // Выводим на график сырые данные из структуры (например, ось Z)
+        acc_z_raw.push_back(imu.accelerometer[2]);
+        acc_z_ideal.push_back(a_ideal);
 
         if (times.size() > 1000) {
             times.erase(times.begin());
