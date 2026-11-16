@@ -47,6 +47,7 @@ public:
                 I_plus[i][j] = (i == j ? 1.0 : 0.0) + Omega_nb_b[i][j] * dt;
 
         C_b_n = C_b_n * I_plus;
+
         orthonormalize();
 
 
