@@ -11,8 +11,7 @@ struct ImuMeasurement {
 
 class Simulator {
 public:
-    float signal_amplitude = 2.0f;   // амплитуда ускорения, м/с^2
-    float frequency = 0.2f;   // частота сигнала, Гц
+    float signal_amplitude = 2.0f;   // ускорение, м/с^2
 
     float roll_deg = 0.0f;
     float pitch_deg = 0.0f;   // тангаж, градусы
@@ -31,7 +30,7 @@ public:
         imu.timestamp = static_cast<int>(t * 1000.0);
 
 
-        double a_signal = signal_amplitude * std::sin(2.0 * M_PI * frequency * t);
+        double a_signal = signal_amplitude;
 
         Vec g_n(0.0, 0.0, SINS::G_ACCEL);
 
