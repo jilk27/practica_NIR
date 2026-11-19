@@ -45,7 +45,9 @@ int main() {
         ImGui::NewFrame();
 
         ImGui::Begin("Управление");
-        ImGui::SliderFloat("Амплитуда", &sim.signal_amplitude, 0.0f, 10.0f);
+        ImGui::SliderFloat("Ускорение x", &sim.a_x, 0.0f, 10.0f);
+        ImGui::SliderFloat("Ускорение y", &sim.a_y, 0.0f, 10.0f);
+        ImGui::SliderFloat("Ускорение z", &sim.a_z, 0.0f, 10.0f);
         ImGui::SliderFloat("Угловая скорость вокруг x", &sim.w_x, -2.0f, 2.0f);
         ImGui::SliderFloat("Угловая скорость вокруг y", &sim.w_y, -2.0f, 2.0f);
         ImGui::SliderFloat("Угловая скорость вокруг z", &sim.w_z, -2.0f, 2.0f);
@@ -53,10 +55,32 @@ int main() {
 
         t += dt;
         // 1 симулятор выдает структуру с сырыми данными
-        ImuMeasurement imu = sim.getMeasurement(dt, sins.C_b_n);
+        ImuMeasurement imu = sim.getMeasurement(dt);
 
         // 2 SINS обрабатывает данные
         sins.update(imu.accelerometer, imu.gyroscope, dt);
+
+
+
+        ImGui::Begin("Навигационное решение SINS");
+
+        ImGui::Text("Широта: %.6f град", sins.lat * 180.0 / M_PI);
+        ImGui::Text("Долгота: %.6f град", sins.lon * 180.0 / M_PI);
+        ImGui::Text("Высота: %.2f м", sins.height);
+
+        ImGui::Text("Скорость Vn (Север): %.4f м/с", sins.V[0]);
+        ImGui::Text("Скорость Ve (Восток): %.4f м/с", sins.V[1]);
+        ImGui::Text("Скорость Vd (Вниз): %.4f м/с", sins.V[2]);
+
+        double sins_roll, sins_pitch, sins_yaw;
+        Mat::toEuler(sins.C_b_n, sins_roll, sins_pitch, sins_yaw);
+        ImGui::Text("Крен (SINS): %.2f град", sins_roll * 180.0 / M_PI);
+        ImGui::Text("Тангаж (SINS): %.2f град", sins_pitch * 180.0 / M_PI);
+        ImGui::Text("Рыскание (SINS): %.2f град", sins_yaw * 180.0 / M_PI);
+
+        ImGui::End();
+
+
 
         times.push_back(t);
 
@@ -64,7 +88,7 @@ int main() {
         acc_x_raw.push_back(imu.accelerometer[0]);
         acc_y_raw.push_back(imu.accelerometer[1]);
         acc_z_raw.push_back(imu.accelerometer[2]);
-        //данные для гироскопа;
+        //данные для гироскопа
         gyro_x_raw.push_back(imu.gyroscope[0]);
         gyro_y_raw.push_back(imu.gyroscope[1]);
         gyro_z_raw.push_back(imu.gyroscope[2]);
