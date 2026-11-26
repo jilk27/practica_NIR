@@ -20,6 +20,10 @@ int main() {
     ImGui::CreateContext();
     ImPlot::CreateContext();
 
+    //делает белый фон
+    ImGui::StyleColorsLight();
+    ImPlot::StyleColorsLight();
+
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->AddFontFromFileTTF("C:/Windows/Fonts/arial.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesCyrillic());
 
@@ -80,6 +84,15 @@ int main() {
 
         ImGui::End();
 
+        ImGui::Begin("Реальные данные из simulator");
+
+        double true_roll, true_pitch, true_yaw;
+        Mat::toEuler(sim.C_b_n_true, true_roll, true_pitch, true_yaw);
+        ImGui::Text("Крен (SINS): %.2f град", sins_roll * 180.0 / M_PI);
+        ImGui::Text("Тангаж (SINS): %.2f град", sins_pitch * 180.0 / M_PI);
+        ImGui::Text("Рыскание (SINS): %.2f град", sins_yaw * 180.0 / M_PI);
+        ImGui::End();
+
 
 
         times.push_back(t);
@@ -104,6 +117,86 @@ int main() {
             gyro_z_raw.erase(gyro_z_raw.begin());
         }
 
+
+
+        ImGui::Begin("Модель ошибок датчиков");
+
+        // --- Ошибки акселерометра ---
+        if (ImGui::CollapsingHeader("Акселерометр")) {
+            // Bias
+            ImGui::InputDouble("Bias X (акс)", &sim.accel_errors.bias[0], 0.01, 0.1, "%.4f");
+            ImGui::InputDouble("Bias Y (акс)", &sim.accel_errors.bias[1], 0.01, 0.1, "%.4f");
+            ImGui::InputDouble("Bias Z (акс)", &sim.accel_errors.bias[2], 0.01, 0.1, "%.4f");
+
+            // Дисперсия шума
+            ImGui::InputDouble("Дисперсия шума (акс)", &sim.accel_errors.noise, 0.0001, 0.001, "%.6f");
+
+            // Матрица H (для простоты зададим только диагональные элементы - масштабные коэффициенты)
+            ImGui::Text("Матрица H (акс):");
+            if (ImGui::BeginTable("AccelHTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
+                for (int i = 0; i < 3; i++) {
+                    ImGui::TableNextRow();
+                    for (int j = 0; j < 3; j++) {
+                        ImGui::TableSetColumnIndex(j);
+                        ImGui::PushID(i * 3 + j);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        ImGui::InputDouble("##val", &sim.accel_errors.H[i][j], 0.0001, 0.001, "%.4f");
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndTable();
+            }
+        }
+
+        // --- Ошибки гироскопа ---
+        if (ImGui::CollapsingHeader("Гироскоп")) {
+            ImGui::InputDouble("Bias X (гиро)", &sim.gyro_errors.bias[0], 0.0001, 0.001, "%.6f");
+            ImGui::InputDouble("Bias Y (гиро)", &sim.gyro_errors.bias[1], 0.0001, 0.001, "%.6f");
+            ImGui::InputDouble("Bias Z (гиро)", &sim.gyro_errors.bias[2], 0.0001, 0.001, "%.6f");
+
+            ImGui::InputDouble("Дисперсия шума (гиро)", &sim.gyro_errors.noise, 0.000001, 0.00001, "%.8f");
+
+            ImGui::Text("Матрица H (гиро):");
+            if (ImGui::BeginTable("GyroHTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchSame)) {
+                for (int i = 0; i < 3; i++) {
+                    ImGui::TableNextRow();
+                    for (int j = 0; j < 3; j++) {
+                        ImGui::TableSetColumnIndex(j);
+                        ImGui::PushID(i * 3 + j + 10);
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        ImGui::InputDouble("##val", &sim.gyro_errors.H[i][j], 0.0001, 0.001, "%.6f");
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndTable();
+            }
+        }
+
+        // --- Кнопка сброса ---
+        if (ImGui::Button("Сбросить ошибки")) {
+            sim.accel_errors = ImuError();
+            sim.gyro_errors = ImuError();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("ПОЛНЫЙ СБРОС (Начать заново)")) {
+            t = 0.0;
+
+            sim = Simulator();
+            sins = SINS();
+
+            times.clear();
+            acc_x_raw.clear();
+            acc_y_raw.clear();
+            acc_z_raw.clear();
+            gyro_x_raw.clear();
+            gyro_y_raw.clear();
+            gyro_z_raw.clear();
+        }
+
+        ImGui::End();
+
         //переключение между графиками акс и гиро
         ImGui::Begin("Графики датчиков"); 
         if (ImGui::BeginTabBar("MyTabBar")) {
@@ -112,23 +205,35 @@ int main() {
             if (ImGui::BeginTabItem("Акселерометры")) {
                 if (ImPlot::BeginPlot("##acc_x", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Ускорение X (м/с²)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
-                    ImPlot::PlotLine("Сырые данные X", times.data(), acc_x_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
+                        ImPlot::PlotLine("Данные акселерометра на X", times.data(), acc_x_raw.data(), times.size());
+                    }
+                    else {
+                        ImPlot::SetupAxesLimits(0.0, 10.0, -15, 15, ImPlotCond_Always);
+                    }
                     ImPlot::EndPlot();
                 }
                 // Рисуем график Y
                 if (ImPlot::BeginPlot("##acc_y", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Ускорение Y (м/с²)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
-                    ImPlot::PlotLine("Сырые данные Y", times.data(), acc_y_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
+                        ImPlot::PlotLine("Данные акселерометра на Y", times.data(), acc_y_raw.data(), times.size());
+                    }
+                    else ImPlot::SetupAxesLimits(0.0, 10.0, -15, 15, ImPlotCond_Always);
                     ImPlot::EndPlot();
                 }
                 // Рисуем график Z
                 if (ImPlot::BeginPlot("##acc_z", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Ускорение Z (м/с²)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
-                    ImPlot::PlotLine("Сырые данные Z", times.data(), acc_z_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -15, 15, ImPlotCond_Always);
+                        ImPlot::PlotLine("Данные акселерометра на Z", times.data(), acc_z_raw.data(), times.size());
+                    }
+                    else ImPlot::SetupAxesLimits(0.0, 10.0, -15, 15, ImPlotCond_Always);
                     ImPlot::EndPlot();
+
                 }
                 ImGui::EndTabItem();
             }
@@ -138,22 +243,31 @@ int main() {
                 // График X
                 if (ImPlot::BeginPlot("##gyro_x", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Угловая скорость X (рад/с)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
-                    ImPlot::PlotLine("Гироскоп X", times.data(), gyro_x_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
+                        ImPlot::PlotLine("Гироскоп X", times.data(), gyro_x_raw.data(), times.size());
+                    }
+                    else ImPlot::SetupAxesLimits(0.0, 10.0, -0.001, 0.001, ImPlotCond_Always);
                     ImPlot::EndPlot();
                 }
                 // График Y
                 if (ImPlot::BeginPlot("##gyro_y", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Угловая скорость Y (рад/с)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
-                    ImPlot::PlotLine("Гироскоп Y", times.data(), gyro_y_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
+                        ImPlot::PlotLine("Гироскоп Y", times.data(), gyro_y_raw.data(), times.size());
+                    }
+                    else ImPlot::SetupAxesLimits(0.0, 10.0, -0.001, 0.001, ImPlotCond_Always);
                     ImPlot::EndPlot();
                 }
                 // График Z
                 if (ImPlot::BeginPlot("##gyro_z", ImVec2(-1, 300))) {
                     ImPlot::SetupAxes("t (с)", "Угловая скорость Z (рад/с)");
-                    ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
-                    ImPlot::PlotLine("Гироскоп Z", times.data(), gyro_z_raw.data(), times.size());
+                    if (!times.empty()) {
+                        ImPlot::SetupAxesLimits(times.front(), times.back(), -0.001, 0.001, ImPlotCond_Always);
+                        ImPlot::PlotLine("Гироскоп Z", times.data(), gyro_z_raw.data(), times.size());
+                    }
+                    else ImPlot::SetupAxesLimits(0.0, 10.0, -0.001, 0.001, ImPlotCond_Always);
                     ImPlot::EndPlot();
                 }
                 ImGui::EndTabItem();
