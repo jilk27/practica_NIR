@@ -2,11 +2,20 @@
 #define _USE_MATH_DEFINES
 #include "VecMath.h"
 #include "SINS.h"
+#include <random>
 
 struct ImuMeasurement {
     int timestamp;   
     Vec accelerometer;
     Vec gyroscope;
+};
+
+struct ImuError {
+    Vec bias;
+    Mat H;
+    double noise;
+
+    ImuError() : bias(0, 0, 0), noise(0.0) {}
 };
 
 class Simulator {
@@ -15,17 +24,21 @@ public:
     float a_y = 0.0f;
     float a_z = 0.0f;
 
-    float roll_deg = 0.0f;
-    float pitch_deg = 0.0f;  
-    float yaw_deg = 0.0f;
-
     Mat C_b_n_true;
 
     float w_x = 0.0f;
     float w_y = 0.0f;
     float w_z = 0.0f;
 
-    double t = 0.0;   
+    double t = 0.0;
+
+    ImuError accel_errors;
+    ImuError gyro_errors;
+
+    std::mt19937 gen;
+    std::normal_distribution<double> dist;
+
+    Simulator() : gen(std::random_device{}()), dist(0.0, 1.0) {}
 
     ImuMeasurement getMeasurement(double dt) {
         ImuMeasurement imu;
@@ -54,8 +67,7 @@ public:
 
         Vec g_b = C_n_b * g_n;
 
-
-        imu.accelerometer = a_signal + g_b;
+        Vec true_acc = a_signal + g_b;
 
 
         double L = 55.0 * SINS::DEG2RAD;
@@ -66,7 +78,30 @@ public:
             -SINS::OMEGA_EARTH * std::sin(L)
         );
 
-        imu.gyroscope = w_body + C_n_b * omega_ie_n;
+        Vec true_gyro = w_body + C_n_b * omega_ie_n;
+
+        
+
+        Vec meas_acc = accel_errors.bias + accel_errors.H * true_acc;
+        Vec meas_gyro = gyro_errors.bias + gyro_errors.H * true_gyro;
+
+        double sigma_acc = std::sqrt(accel_errors.noise);
+        double sigma_gyro = std::sqrt(gyro_errors.noise);
+
+        meas_acc[0] += dist(gen) * sigma_acc;
+        meas_acc[1] += dist(gen) * sigma_acc;
+        meas_acc[2] += dist(gen) * sigma_acc;
+
+        meas_gyro[0] += dist(gen) * sigma_gyro;
+        meas_gyro[1] += dist(gen) * sigma_gyro;
+        meas_gyro[2] += dist(gen) * sigma_gyro;
+
+        //imu.accelerometer = true_acc;
+        //imu.gyroscope = true_gyro;
+
+        imu.accelerometer = meas_acc;
+        imu.gyroscope = meas_gyro;
+
         return imu;
     }
 };
